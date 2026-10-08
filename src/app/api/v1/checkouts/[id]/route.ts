@@ -1,5 +1,6 @@
-import { paymentState } from "@/lib/payment-policy";
-import { apiCaller, json, purchase, sessionMode } from "@/lib/stripe";
+import { expireCheckout } from "@/lib/checkout-expiration";
+import { paymentState, ownsSession } from "@/lib/payment-policy";
+import { apiCaller, json, purchase, sessionMode, stripe } from "@/lib/stripe";
 import { mayActFor } from "@/lib/products";
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -14,4 +15,20 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       product: s.metadata?.product, reference: s.metadata?.reference, amount_total: s.amount_total,
       currency: s.currency, subscription: typeof s.subscription === "string" ? s.subscription : null });
   } catch { return json({ error: "Checkout unavailable" }, 404); }
+}
+
+/** Expires this product's open checkout; a completion race returns the completed status. */
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
+  let mode;
+  try { mode = sessionMode(id); } catch { return json({ error: "Not found" }, 404); }
+  const caller = apiCaller(request, mode);
+  if (!caller) return json({ error: "Unauthorized" }, 401);
+  try {
+    const s = await expireCheckout(stripe(mode).checkout.sessions, id, caller);
+    if (!ownsSession(s)) return json({ error: "Checkout unavailable" }, 404);
+    return json({ id: s.id, mode, state: paymentState(s), product: s.metadata?.product,
+      reference: s.metadata?.reference, amount_total: s.amount_total, currency: s.currency,
+      subscription: typeof s.subscription === "string" ? s.subscription : null });
+  } catch { return json({ error: "Checkout could not be expired; retry later" }, 502); }
 }

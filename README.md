@@ -52,6 +52,7 @@ Each selling product is registered in `PAYMENTS_PRODUCTS` (JSON in `payments-env
 - **Trials.** Subscriptions may pass `trialDays` (1–30).
 - **Signed events.** Stripe checkout, subscription and invoice events for a product's purchases are re-read from Stripe and POSTed to the product's events URL as `checkout.updated` or `subscription.updated`. Each carries the current subscription snapshot (`status`, `current_period_end`, `cancel_at_period_end`, `price`, …), so applying them in any order converges. The `AXXES-Payments-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<body>">` header is signed with `eventSecret`; `verifyEvent` in `src/lib/products.ts` is the reference verifier. A non-2xx response makes Stripe retry the original event (for up to three days). Deduplicate on `id`.
 - **Subscription status.** `GET /api/v1/subscriptions/<sub id>?mode=live|test` returns the same snapshot.
+- **Find subscriptions.** `GET /api/v1/subscriptions?reference=<your reference>&mode=live|test` lists this product's subscriptions for that reference, newest first, so a product doesn't have to store Stripe IDs. It uses Stripe search, which can lag about a minute behind a new subscription; rely on events and the return redirect for fresh state.
 - **Manage subscription.** `POST /api/v1/portal-sessions` with `{ mode, subscription, returnUrl }` returns a short-lived Stripe billing portal URL where the buyer can update their card or cancel. The product must check that the signed-in user owns that subscription first.
 
 ## Development

@@ -6,6 +6,7 @@ const schema = z.object({
   subscription: z.string(),
   returnUrl: z.url().max(450),
 }).strict();
+// To open the portal by reference instead, list subscriptions first (GET /api/v1/subscriptions?reference=).
 // Lets a buyer update their card or cancel. The product must already have checked that the signed-in
 // user owns this subscription; the link is a short-lived bearer capability for that Stripe customer.
 export async function POST(request: Request) {

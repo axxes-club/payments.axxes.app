@@ -1,11 +1,16 @@
 import { parseQuote, checkoutParams, providerIdempotencyKey } from "@/lib/payment-policy";
-import { apiAuthorized, json, stripe } from "@/lib/stripe";
+import { apiCaller, json, stripe } from "@/lib/stripe";
+import { allowedReturnUrl, mayActFor, registry } from "@/lib/products";
 export async function POST(request: Request) {
   const raw = await request.text();
   if (raw.length > 16384) return json({ error: "Request too large" }, 413);
   let quote;
   try { quote = parseQuote(JSON.parse(raw)); } catch { return json({ error: "Invalid payment quote" }, 400); }
-  if (!apiAuthorized(request, quote.mode)) return json({ error: "Unauthorized" }, 401);
+  const caller = apiCaller(request, quote.mode);
+  if (!caller) return json({ error: "Unauthorized" }, 401);
+  if (!mayActFor(caller, quote.product)) return json({ error: "This key cannot sell that product" }, 403);
+  if (quote.returnUrl && !allowedReturnUrl(quote.returnUrl, quote.product, registry()))
+    return json({ error: "Return URL origin is not registered for this product" }, 400);
   const key = request.headers.get("idempotency-key");
   if (!key || !/^[A-Za-z0-9_-]{12,100}$/.test(key)) return json({ error: "Provide an Idempotency-Key of 12–100 letters, digits, underscores or hyphens" }, 400);
   try {

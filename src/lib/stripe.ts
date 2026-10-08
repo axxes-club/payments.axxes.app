@@ -1,6 +1,7 @@
 import "server-only";
 import Stripe from "stripe";
-import { authorized, ownsSession, type Mode } from "./payment-policy";
+import { ownsSession, ownsSubscription, type Mode } from "./payment-policy";
+import { registry, resolveCaller, type Caller } from "./products";
 const clients = new Map<Mode, Stripe>();
 export function stripe(mode: Mode) {
   if (!clients.has(mode)) {
@@ -19,13 +20,27 @@ export function sessionMode(id: string): Mode {
   if (!/^cs_(test|live)_[A-Za-z0-9]{20,250}$/.test(id)) throw new Error("Invalid checkout");
   return id.startsWith("cs_test_") ? "test" : "live";
 }
-export function apiAuthorized(request: Request, mode: Mode) {
-  return authorized(request.headers.get("authorization"), mode, { live: process.env.PAYMENTS_API_KEY_LIVE, test: process.env.PAYMENTS_API_KEY_TEST });
+export function apiCaller(request: Request, mode: Mode): Caller | null {
+  return resolveCaller(request.headers.get("authorization"), mode, { live: process.env.PAYMENTS_API_KEY_LIVE, test: process.env.PAYMENTS_API_KEY_TEST }, registry());
 }
 export async function purchase(id: string) {
   const mode = sessionMode(id);
   const session = await stripe(mode).checkout.sessions.retrieve(id);
   if (!ownsSession(session)) throw new Error("Checkout not found");
   return { mode, session };
+}
+export async function subscriptionFor(id: string, mode: Mode) {
+  if (!/^sub_[A-Za-z0-9]{8,250}$/.test(id)) throw new Error("Invalid subscription");
+  const subscription = await stripe(mode).subscriptions.retrieve(id);
+  if (!ownsSubscription(subscription)) throw new Error("Subscription not found");
+  return subscription;
+}
+/** What a product needs to grant or withdraw access. No card or customer PII. */
+export function subscriptionSnapshot(s: Stripe.Subscription) {
+  const item = s.items.data[0];
+  return { id: s.id, status: s.status, product: s.metadata.product, reference: s.metadata.reference,
+    price: item?.price.id ?? null, interval: item?.price.recurring?.interval ?? null, interval_count: item?.price.recurring?.interval_count ?? null,
+    current_period_end: item?.current_period_end ?? null, cancel_at_period_end: s.cancel_at_period_end,
+    trial_end: s.trial_end, canceled_at: s.canceled_at, ended_at: s.ended_at };
 }
 export const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });

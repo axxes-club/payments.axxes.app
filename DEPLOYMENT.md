@@ -1,7 +1,11 @@
-# Main branch CI and production ownership
+# AXXES Payments deployment
 
-Every push and pull request to main installs the locked dependencies, runs lint and TypeScript, and builds on Linux with Node 24.
+`payments.axxes.app` is the central checkout for AXXES products and services. This repository is independent of Tollbooth, which lets AXXES customers collect their own payments.
 
-This repository remains the unimplemented Payments scaffold. The live payments.axxes.club alias is served by Tollbooth on Google Cloud Run. Tollbooth main owns its continuous deployment and verified immutable image release. Deploying this scaffold over the alias would replace the working payment product with the starter page. A dedicated Payments runtime requires an implemented application and an explicit routing migration.
+Runtime: Next.js standalone on Cloud Run `payments`, region `us-west1`, project `gravy-meta`. Artifact Registry: `ci-payments`. Runtime account: `payments-runtime@gravy-meta.iam.gserviceaccount.com`. Runtime configuration: dedicated Secret Manager secret `payments-env`, mounted at `/secrets/env`. No credentials are included in images or source control.
 
-Inherited Stripe route drafts referenced absent Prisma, Clerk, mail, ticket, and wallet modules. Their exact source is retained in docs/legacy-payments with .txt suffixes, outside the executable app, until a dedicated application is implemented. The live Tollbooth payment routes continue to own the production alias.
+Cloud Build runs unit tests, lint, type checks and the production build inside Linux before publishing the image. Submit with `gcloud builds submit --config=cloudbuild.yaml --project=gravy-meta`; deploy the resulting image to the Payments service, mount the secret, and route `payments.axxes.app` through `axxes-lb` → `payments-be` → `payments-neg`. DNS A record points to `136.81.161.193`. TLS uses the existing active wildcard `*.axxes.app` certificate.
+
+Required variables: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_TEST_SECRET_KEY`, `STRIPE_TEST_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_TEST_WEBHOOK_SECRET`, `PAYMENTS_API_KEY_LIVE`, `PAYMENTS_API_KEY_TEST`. Live and test API credentials must each contain at least 32 characters. The environment file must use POSIX-compatible `KEY=value` assignments. Webhook URLs for both environments: `https://payments.axxes.app/api/webhooks/stripe`.
+
+Verify `/api/health` returns HTTP 200 and `ready:true`, then create and pay a sandbox checkout before sending customers live purchase links. `/api/health` validates configuration structure; actual provider connectivity requires a checkout/status request.

@@ -39,7 +39,7 @@ export async function subscriptionFor(id: string, mode: Mode) {
 export function subscriptionSnapshot(s: Stripe.Subscription) {
   const item = s.items.data[0];
   return { id: s.id, status: s.status, product: s.metadata.product, reference: s.metadata.reference,
-    price: item?.price.id ?? null, interval: item?.price.recurring?.interval ?? null, interval_count: item?.price.recurring?.interval_count ?? null,
+    price: item?.price.id ?? null, lookup_key: item?.price.lookup_key ?? null, interval: item?.price.recurring?.interval ?? null, interval_count: item?.price.recurring?.interval_count ?? null,
     current_period_end: item?.current_period_end ?? null, cancel_at_period_end: s.cancel_at_period_end,
     trial_end: s.trial_end, canceled_at: s.canceled_at, ended_at: s.ended_at };
 }

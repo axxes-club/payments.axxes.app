@@ -48,6 +48,7 @@ Each selling product is registered in `PAYMENTS_PRODUCTS` (JSON in `payments-env
 
 - **Product keys.** A product key can create and read purchases only for its own `product`. The administrative `PAYMENTS_API_KEY_*` keys still act for any product.
 - **Return to the product.** Pass `returnUrl` when creating a checkout. Its origin must be in the product's `returnOrigins`. After paying, the confirmation page shows "Return to <name>" and appends `axxes_checkout=<checkout id>`. Verify that ID server-side before granting anything.
+- **Lookup keys.** Instead of `priceId`, pass `lookupKey` (for example `vitrine_collector_monthly`). It is the same in test and live, must start with `<product>_`, and is resolved to the active Stripe price server-side.
 - **Trials.** Subscriptions may pass `trialDays` (1–30).
 - **Signed events.** Stripe checkout, subscription and invoice events for a product's purchases are re-read from Stripe and POSTed to the product's events URL as `checkout.updated` or `subscription.updated`. Each carries the current subscription snapshot (`status`, `current_period_end`, `cancel_at_period_end`, `price`, …), so applying them in any order converges. The `AXXES-Payments-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<body>">` header is signed with `eventSecret`; `verifyEvent` in `src/lib/products.ts` is the reference verifier. A non-2xx response makes Stripe retry the original event (for up to three days). Deduplicate on `id`.
 - **Subscription status.** `GET /api/v1/subscriptions/<sub id>?mode=live|test` returns the same snapshot.

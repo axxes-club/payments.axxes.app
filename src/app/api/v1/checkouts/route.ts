@@ -14,6 +14,11 @@ export async function POST(request: Request) {
   const key = request.headers.get("idempotency-key");
   if (!key || !/^[A-Za-z0-9_-]{12,100}$/.test(key)) return json({ error: "Provide an Idempotency-Key of 12–100 letters, digits, underscores or hyphens" }, 400);
   try {
+    if (quote.lookupKey) {
+      const price = (await stripe(quote.mode).prices.list({ lookup_keys: [quote.lookupKey], active: true, limit: 1 })).data[0];
+      if (!price) return json({ error: "Unknown price" }, 400);
+      quote = { ...quote, priceId: price.id, lookupKey: undefined };
+    }
     const session = await stripe(quote.mode).checkout.sessions.create(checkoutParams(quote), {
       idempotencyKey: providerIdempotencyKey(key, quote.mode, request.headers.get("authorization")!),
     });

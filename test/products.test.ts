@@ -54,3 +54,10 @@ test("subscriptions carry product identity onto the Stripe subscription and allo
   assert.equal(ownsSubscription({ metadata: { source: "axxes_payments", product: "afters" } }), true)
   assert.equal(ownsSubscription({ metadata: { organizerProfileId: "x" } }), false)
 })
+test("lookup keys are confined to the purchasing product and must be resolved before checkout", () => {
+  const base = { mode: "test", product: "vitrine", reference: "t-1", purchase: "subscription" }
+  assert.equal(parseQuote({ ...base, lookupKey: "vitrine_collector_monthly" }).lookupKey, "vitrine_collector_monthly")
+  assert.throws(() => parseQuote({ ...base, lookupKey: "afters_signature_30d" }))
+  assert.throws(() => parseQuote({ ...base, lookupKey: "vitrine_collector_monthly", priceId: "price_abc123" }))
+  assert.throws(() => checkoutParams({ ...base, lookupKey: "vitrine_collector_monthly" }))
+})

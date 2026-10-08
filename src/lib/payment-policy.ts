@@ -70,3 +70,25 @@ export function checkoutParams(value: unknown): Stripe.Checkout.SessionCreatePar
 export function ownsSubscription(s: { metadata?: Record<string, string> | null }) {
   return s.metadata?.source === "axxes_payments" && !!s.metadata.product;
 }
+const changeSchema = z.object({
+  mode: z.enum(["live", "test"]).default("live"),
+  lookupKey: z.string().regex(/^[a-z][a-z0-9_-]{2,120}$/),
+}).strict();
+export const parseChange = (value: unknown) => changeSchema.parse(value);
+/** Statuses whose plan may still be changed in place. Ended or unpaid subscriptions start over at checkout. */
+const CHANGEABLE = ["active", "trialing", "past_due"];
+/**
+ * Why a subscription cannot move to a price, or null when it can. A product only moves its own
+ * subscriptions, only to its own recurring prices, and never across currencies.
+ */
+export function changeRefusal(
+  sub: { status: string; metadata?: Record<string, string> | null; items: { data: Array<{ price: { currency: string } }> } },
+  price: { active: boolean; currency: string; lookup_key: string | null; recurring: unknown } | undefined,
+) {
+  const product = sub.metadata?.product;
+  if (!product || !CHANGEABLE.includes(sub.status)) return "This subscription cannot be changed";
+  if (sub.items.data.length !== 1) return "This subscription cannot be changed";
+  if (!price || !price.active || !price.recurring || !price.lookup_key?.startsWith(`${product}_`)) return "Unknown price for this product";
+  if (price.currency !== sub.items.data[0].price.currency) return "Prices must share a currency";
+  return null;
+}

@@ -32,9 +32,28 @@ Call `GET /api/v1/checkouts/<id>` using the matching environment integration key
 
 Do not grant access based on a browser URL, callback, or redirect. Each selling app retains its order and entitlement records and verifies this server endpoint before fulfillment. A completed subscription checkout verifies the initial transaction only; ongoing subscription access requires checking Stripe subscription and invoice status and handling cancellations/renewals in the selling app.
 
-The signed webhook records operational events only. It does **not** update product entitlements or provide a durable fulfillment ledger. Products must integrate the creation/status API before their customers can use this checkout. Existing product checkout flows are not automatically replaced by deploying this service.
+Payments forwards signed events (see Product integration) but keeps no entitlement records or fulfilment ledger of its own. Products must integrate the creation/status API before their customers can use this checkout. Existing product checkout flows are not automatically replaced by deploying this service.
 
 Purchase URLs are bearer links; treat them as private. Public pages expose only checkout UI and confirmation. Sessions created by other applications on the same Stripe account are rejected.
+
+## Product integration
+
+Each selling product is registered in `PAYMENTS_PRODUCTS` (JSON in `payments-env`, never in source):
+
+```json
+{ "afters": { "name": "afters.am", "keys": { "live": "<64 hex>", "test": "<64 hex>" },
+  "returnOrigins": ["https://afters.am"],
+  "events": { "live": "https://afters.am/api/axxes-payments/events" }, "eventSecret": "<64 hex>" } }
+```
+
+- **Product keys.** A product key can create and read purchases only for its own `product`. The administrative `PAYMENTS_API_KEY_*` keys still act for any product.
+- **Return to the product.** Pass `returnUrl` when creating a checkout. Its origin must be in the product's `returnOrigins`. After paying, the confirmation page shows "Return to <name>" and appends `axxes_checkout=<checkout id>`. Verify that ID server-side before granting anything.
+- **Lookup keys.** Instead of `priceId`, pass `lookupKey` (for example `vitrine_collector_monthly`). It is the same in test and live, must start with `<product>_`, and is resolved to the active Stripe price server-side.
+- **Trials.** Subscriptions may pass `trialDays` (1–30).
+- **Signed events.** Stripe checkout, subscription and invoice events for a product's purchases are re-read from Stripe and POSTed to the product's events URL as `checkout.updated` or `subscription.updated`. Each carries the current subscription snapshot (`status`, `current_period_end`, `cancel_at_period_end`, `price`, …), so applying them in any order converges. The `AXXES-Payments-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<body>">` header is signed with `eventSecret`; `verifyEvent` in `src/lib/products.ts` is the reference verifier. A non-2xx response makes Stripe retry the original event (for up to three days). Deduplicate on `id`.
+- **Subscription status.** `GET /api/v1/subscriptions/<sub id>?mode=live|test` returns the same snapshot.
+- **Find subscriptions.** `GET /api/v1/subscriptions?reference=<your reference>&mode=live|test` lists this product's subscriptions for that reference, newest first, so a product doesn't have to store Stripe IDs. It uses Stripe search, which can lag about a minute behind a new subscription; rely on events and the return redirect for fresh state.
+- **Manage subscription.** `POST /api/v1/portal-sessions` with `{ mode, subscription, returnUrl }` returns a short-lived Stripe billing portal URL where the buyer can update their card or cancel. The product must check that the signed-in user owns that subscription first.
 
 ## Development
 

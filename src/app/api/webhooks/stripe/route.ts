@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { json, stripe } from "@/lib/stripe";
 import type { Mode } from "@/lib/payment-policy";
+import { deliver, productEvent } from "@/lib/events";
 export async function POST(request: Request) {
   const signature = request.headers.get("stripe-signature");
   if (!signature) return json({ error: "Missing signature" }, 400);
@@ -16,7 +17,14 @@ export async function POST(request: Request) {
     } catch { /* Try the other configured environment. */ }
   }
   if (!event) return json({ error: "Invalid signature" }, 400);
-  // Audit only. Selling apps must verify payment through the authenticated status API.
   console.info("stripe_event", { id: event.id, type: event.type, live: event.livemode });
+  // Forward a signed, current-state event to the selling product. A failed delivery returns 502 so Stripe
+  // retries; Stripe is the retry queue and Payments keeps no ledger. Products still verify before granting access.
+  let outbound;
+  try { outbound = await productEvent(event); } catch (error) {
+    console.error("event_build_failed", { id: event.id, error: error instanceof Error ? error.name : "UnknownError" });
+    return json({ error: "Retry later" }, 502);
+  }
+  if (outbound && !(await deliver(outbound))) return json({ error: "Product delivery failed" }, 502);
   return json({ received: true });
 }

@@ -10,13 +10,22 @@ const schema = z.object({
   currency: z.enum(["usd", "eur", "gbp", "cad"]).default("usd"),
   quantity: z.number().int().min(1).max(99).default(1),
   priceId: z.string().regex(/^price_[A-Za-z0-9]+$/).optional(),
+  // A stable Stripe lookup key (same in test and live), resolved server-side to a price ID. Must start with "<product>_".
+  lookupKey: z.string().regex(/^[a-z][a-z0-9_-]{2,120}$/).optional(),
   purchase: z.enum(["payment", "subscription"]).default("payment"),
   email: z.email().optional(),
+  returnUrl: z.url().max(450).optional(),
+  trialDays: z.number().int().min(1).max(30).optional(),
 }).strict().superRefine((v, ctx) => {
-  if (v.priceId ? v.amount !== undefined : v.amount === undefined || !v.description)
+  if (v.lookupKey && (v.priceId || !v.lookupKey.startsWith(`${v.product}_`)))
+    ctx.addIssue({ code: "custom", message: "A lookup key must belong to the purchasing product and replaces priceId" });
+  const priced = v.priceId || v.lookupKey;
+  if (priced ? v.amount !== undefined : v.amount === undefined || !v.description)
     ctx.addIssue({ code: "custom", message: "Supply a Stripe price or an amount and description" });
-  if (v.purchase === "subscription" && !v.priceId)
+  if (v.purchase === "subscription" && !priced)
     ctx.addIssue({ code: "custom", message: "Subscriptions require a recurring Stripe price" });
+  if (v.trialDays && v.purchase !== "subscription")
+    ctx.addIssue({ code: "custom", message: "Trials apply only to subscriptions" });
   if (v.amount && v.amount * v.quantity > 99999999)
     ctx.addIssue({ code: "custom", message: "Quote total exceeds the supported limit" });
 });
@@ -43,13 +52,21 @@ export function paymentState(s: { status: string | null; payment_status: string 
 }
 export function checkoutParams(value: unknown): Stripe.Checkout.SessionCreateParams {
   const q = parseQuote(value);
+  if (q.lookupKey) throw new Error("Resolve the lookup key to a price first");
   return { ui_mode: "embedded_page", redirect_on_completion: "never", mode: q.purchase,
     allowed_payment_method_types: ["card"],
     customer_email: q.email,
     branding_settings: { display_name: "AXXES", background_color: "#ffffff", button_color: "#3247ef" },
-    metadata: { source: "axxes_payments", product: q.product, reference: q.reference },
+    metadata: { source: "axxes_payments", product: q.product, reference: q.reference, ...(q.returnUrl ? { return_url: q.returnUrl } : {}) },
+    ...(q.purchase === "subscription" ? { subscription_data: {
+      metadata: { source: "axxes_payments", product: q.product, reference: q.reference },
+      ...(q.trialDays ? { trial_period_days: q.trialDays } : {}),
+    } } : {}),
     line_items: [q.priceId ? { price: q.priceId, quantity: q.quantity } : {
       quantity: q.quantity, price_data: { currency: q.currency, unit_amount: q.amount!, product_data: { name: q.description! } }
     }],
   };
+}
+export function ownsSubscription(s: { metadata?: Record<string, string> | null }) {
+  return s.metadata?.source === "axxes_payments" && !!s.metadata.product;
 }

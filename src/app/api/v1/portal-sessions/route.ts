@@ -1,3 +1,4 @@
+import {paymentsAdmission} from "@/lib/security-rate-limit";
 import { z } from "zod";
 import { apiCaller, json, stripe, subscriptionFor } from "@/lib/stripe";
 import { allowedReturnUrl, mayActFor, registry } from "@/lib/products";
@@ -10,6 +11,7 @@ const schema = z.object({
 // Lets a buyer update their card or cancel. The product must already have checked that the signed-in
 // user owns this subscription; the link is a short-lived bearer capability for that Stripe customer.
 export async function POST(request: Request) {
+  if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
   let body;
   try { body = schema.parse(JSON.parse(await request.text())); } catch { return json({ error: "Invalid request" }, 400); }
   const caller = apiCaller(request, body.mode);

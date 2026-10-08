@@ -1,7 +1,9 @@
+import {paymentsAdmission} from "@/lib/security-rate-limit";
 import { parseQuote, checkoutParams, providerIdempotencyKey } from "@/lib/payment-policy";
 import { apiCaller, json, stripe } from "@/lib/stripe";
 import { allowedReturnUrl, mayActFor, registry } from "@/lib/products";
 export async function POST(request: Request) {
+  if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
   const raw = await request.text();
   if (raw.length > 16384) return json({ error: "Request too large" }, 413);
   let quote;

@@ -1,9 +1,11 @@
+import {paymentsAdmission} from "@/lib/security-rate-limit";
 import { apiCaller, json, subscriptionFor, subscriptionSnapshot } from "@/lib/stripe";
 import { mayActFor } from "@/lib/products";
 import { stripe } from "@/lib/stripe";
 import { changeRefusal, parseChange } from "@/lib/payment-policy";
 // Subscription IDs carry no environment, so the caller names it: ?mode=test (default live).
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
   const { id } = await context.params;
   const mode = new URL(request.url).searchParams.get("mode") === "test" ? "test" : "live";
   const caller = apiCaller(request, mode);
@@ -18,6 +20,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 // Moves a subscription to another of the same product's recurring prices in place. Stripe prorates
 // the difference on the next invoice, so an upgrade never needs a second subscription.
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
   const { id } = await context.params;
   let change;
   try { change = parseChange(await request.json()); } catch { return json({ error: "Invalid request" }, 400); }

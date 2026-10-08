@@ -1,0 +1,1 @@
+export default function NotFound() { return <main className="landing"><span className="eyebrow">AXXES PAYMENTS</span><h1>Link unavailable.</h1><p>Check your payment link, or request a new one from your AXXES product or service.</p><a className="button" href="https://axxes.app">Go to AXXES →</a></main>; }

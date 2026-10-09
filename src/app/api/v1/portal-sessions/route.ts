@@ -11,6 +11,7 @@ const schema = z.object({
 // Lets a buyer update their card or cancel. The product must already have checked that the signed-in
 // user owns this subscription; the link is a short-lived bearer capability for that Stripe customer.
 export async function POST(request: Request) {
+  if(!apiCaller(request,"live") && !apiCaller(request,"test"))return json({error:"Unauthorized"},401);
   if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
   let body;
   try { body = schema.parse(JSON.parse(await request.text())); } catch { return json({ error: "Invalid request" }, 400); }

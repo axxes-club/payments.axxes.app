@@ -5,6 +5,7 @@ import { ownsSubscription } from "@/lib/payment-policy";
 // Stripe IDs. ?reference=<ref>&mode=live|test; the administrative key must also pass ?product=<key>.
 // Backed by Stripe search, which can lag new subscriptions by about a minute; use events for fresh state.
 export async function GET(request: Request) {
+  if(!apiCaller(request,"live") && !apiCaller(request,"test"))return json({error:"Unauthorized"},401);
   if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
   const params = new URL(request.url).searchParams;
   const mode = params.get("mode") === "test" ? "test" : "live";

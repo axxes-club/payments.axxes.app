@@ -3,6 +3,7 @@ import { parseQuote, checkoutParams, providerIdempotencyKey } from "@/lib/paymen
 import { apiCaller, json, stripe } from "@/lib/stripe";
 import { allowedReturnUrl, mayActFor, registry } from "@/lib/products";
 export async function POST(request: Request) {
+  if(!apiCaller(request,"live") && !apiCaller(request,"test"))return json({error:"Unauthorized"},401);
   if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
   const raw = await request.text();
   if (raw.length > 16384) return json({ error: "Request too large" }, 413);

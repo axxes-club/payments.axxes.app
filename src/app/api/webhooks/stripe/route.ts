@@ -1,3 +1,4 @@
+import { BodyRefusal, readBody } from "@/lib/request-body";
 import type Stripe from "stripe";
 import { json, stripe } from "@/lib/stripe";
 import type { Mode } from "@/lib/payment-policy";
@@ -5,8 +6,10 @@ import { deliver, productEvent } from "@/lib/events";
 export async function POST(request: Request) {
   const signature = request.headers.get("stripe-signature");
   if (!signature) return json({ error: "Missing signature" }, 400);
-  const body = await request.text();
-  if (body.length > 1048576) return json({ error: "Request too large" }, 413);
+  let body: string;
+  try { body = await readBody(request, 1048576); } catch (error) {
+    return json({ error: "Request body refused" }, error instanceof BodyRefusal ? error.status : 400);
+  }
   let event: Stripe.Event | undefined;
   for (const mode of ["live", "test"] as Mode[]) {
     const secret = process.env[mode === "live" ? "STRIPE_WEBHOOK_SECRET" : "STRIPE_TEST_WEBHOOK_SECRET"];

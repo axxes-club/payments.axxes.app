@@ -2,6 +2,7 @@ FROM node:24-alpine AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
+COPY vendor ./vendor
 RUN npm ci
 COPY . .
 RUN npm test && npm run lint && npm run typecheck && npm run build

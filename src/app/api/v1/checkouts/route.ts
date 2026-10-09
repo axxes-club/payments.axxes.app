@@ -1,9 +1,13 @@
+import { BodyRefusal, readBody } from "@/lib/request-body";
+import {paymentsAdmission} from "@/lib/security-rate-limit";
 import { parseQuote, checkoutParams, providerIdempotencyKey } from "@/lib/payment-policy";
 import { apiCaller, json, stripe } from "@/lib/stripe";
 import { allowedReturnUrl, mayActFor, registry } from "@/lib/products";
 export async function POST(request: Request) {
-  const raw = await request.text();
-  if (raw.length > 16384) return json({ error: "Request too large" }, 413);
+  if(!apiCaller(request,"live") && !apiCaller(request,"test"))return json({error:"Unauthorized"},401);
+  if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
+  let raw: string;
+  try { raw = await readBody(request); } catch (error) { return json({ error: "Request body refused" }, error instanceof BodyRefusal ? error.status : 400); }
   let quote;
   try { quote = parseQuote(JSON.parse(raw)); } catch { return json({ error: "Invalid payment quote" }, 400); }
   const caller = apiCaller(request, quote.mode);

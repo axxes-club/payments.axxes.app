@@ -1,8 +1,11 @@
+import {paymentsAdmission} from "@/lib/security-rate-limit";
 import { expireCheckout } from "@/lib/checkout-expiration";
 import { paymentState, ownsSession } from "@/lib/payment-policy";
 import { apiCaller, json, purchase, sessionMode, stripe } from "@/lib/stripe";
 import { mayActFor } from "@/lib/products";
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  if(!apiCaller(request,"live") && !apiCaller(request,"test"))return json({error:"Unauthorized"},401);
+  if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
   const { id } = await context.params;
   let mode;
   try { mode = sessionMode(id); } catch { return json({ error: "Not found" }, 404); }
@@ -19,6 +22,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
 /** Expires this product's open checkout; a completion race returns the completed status. */
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  if(!apiCaller(request,"live") && !apiCaller(request,"test"))return json({error:"Unauthorized"},401);
+  if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
   const { id } = await context.params;
   let mode;
   try { mode = sessionMode(id); } catch { return json({ error: "Not found" }, 404); }

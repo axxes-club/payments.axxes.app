@@ -1,9 +1,12 @@
+import {paymentsAdmission} from "@/lib/security-rate-limit";
 import { apiCaller, json, stripe, subscriptionSnapshot } from "@/lib/stripe";
 import { ownsSubscription } from "@/lib/payment-policy";
 // Lists a product's subscriptions for one of its references (newest first), so products need not store
 // Stripe IDs. ?reference=<ref>&mode=live|test; the administrative key must also pass ?product=<key>.
 // Backed by Stripe search, which can lag new subscriptions by about a minute; use events for fresh state.
 export async function GET(request: Request) {
+  if(!apiCaller(request,"live") && !apiCaller(request,"test"))return json({error:"Unauthorized"},401);
+  if(!await paymentsAdmission(request))return json({error:"Too many requests or admission storage unavailable"},429);
   const params = new URL(request.url).searchParams;
   const mode = params.get("mode") === "test" ? "test" : "live";
   const caller = apiCaller(request, mode);
